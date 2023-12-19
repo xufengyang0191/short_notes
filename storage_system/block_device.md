@@ -2,7 +2,7 @@
 
 [TOC]
 
-## 前提：HDD,SMR-HDD,SSD,ZNS SSD
+## 前提：HDD, SMR-HDD, SSD, ZNS SSD
 
 默认已了解相关基础内容：
 

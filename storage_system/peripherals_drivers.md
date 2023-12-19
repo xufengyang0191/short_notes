@@ -6,13 +6,13 @@
 
 I/O 设备的实质如下图所示：
 
-<img src="images\device\IOdevice_abstract.png" alt="IOdevice_abstract" style="zoom:67%;" />
+![IO 设备抽象](./img/peripherals_drivers/IOdevice_abstract.png)
 
 想要和 I/O 设备交互的程序可以读取它的状态寄存器，向 I/O 设备的命令寄存器中写入命令，从 I/O 设备的数据寄存器中写入/向其中输出数据，在 I/O 设备的内部存在着用于实现 I/O 设备的自己的功能的微处理器，以及它的存储器，以及不同类型的 I/O 设备特有的一些硬件。
 
 总线可以理解为一个特殊的 I/O 设备，有了总线之后当计算机拥有越来越多的外部设备之后，不用再让每个外设都直接连接到 CPU，而是可以让 CPU 和总线连接，所有可以使用的外部设备通过主板上的插槽连接到总线上，外部设备通过总线和 CPU 进行通信，这样的设计相当于为 CPU 设计了一层抽象，即 CPU 可以通过总线与任何的外部设备连接，而不需要 CPU 和一个个外部设备单独连接，如下所示：
 
-<img src="images\device\CPU_BUS_Device.png" alt="CPU_BUS_Device" style="zoom:50%;" />
+![IO 设备抽象](./img/peripherals_drivers/CPU_BUS_Device.png)
 
 外设一般有两种方式报告CPU外设的工作状态——程序查询方式和中断方式。
 
@@ -36,8 +36,6 @@ DMA 是除了**总线和中断以外的一种非常特殊的 I/O 设备，DMA �
 
 DMA  控制器是一种在**系统内部**转移数据的独特外设，可以将其视为一种能够通过一组专用总线将内部和外部存储器与每个具有 DMA 能力的外设连接起来的控制器。**因此 DMA 的本质是通过在系统里增加一个 CPU 来加速从内存到总线的数据搬运，DMA 的外接线直接被连接到I/O总线和内存上。**
 
-
-
 ## 2. 设备驱动原理
 
 在 CPU 以及操作系统的眼中，外部的 I/O 设备其实就是一组寄存器和一组相应的协议（规定给哪个寄存器写入哪种数据，I/O 设备会做出什么样的反应），不同的设备有着不同的协议，**外部设备本身就存在着一定的复杂性**（比如说功能很多的打印机），操作系统直接把设备以寄存器的形式暴露给应用程序，让应用程序按照外部设备的协议来编写并不是一个很好的选择（这会很大程度上提升程序编写的复杂度，出错后会造成很严重的后果，比如说打印机打印错误浪费很多纸张），因此**需要对设备做抽象，让应用程序无需访问设备的寄存器，只需要通过一个尽可能通用的API来访问设备。**
@@ -54,8 +52,6 @@ Unix 系统的 `/dev` 目录中的设备不都是真实存在的，比如说 `de
 
 **设备驱动程序是 Linux 内核中最多也是质量最低的代码（稍有不慎就有可能因为指针的问题 kernel panic，并且由于某些设备比较稀有导致对它的驱动程序进行测试的场景与机会都不多），目前Linux系统的一大发展趋势就是将驱动程序从内核空间转移到用户空间。**
 
-
-
 ## 3. 多个进程怎样共享外设
 
 从共享的角度划分，外设分为**共享设备**和**独占设备**。
@@ -67,8 +63,6 @@ Unix 系统的 `/dev` 目录中的设备不都是真实存在的，比如说 `de
 下面，我们以打印机为例来说明多个进程怎样共享“独占设备”的。操作系统可以设置一个打印队列，准备一个打印机的驱动程序 C，打印机每打印完一个作业时，给 CPU 发中断，CPU 响应中断，转入内核态，并跳到 C 执行，C 把该作业对应的进程唤醒，从打印队列里取出一项新作业，把相关参数如待打印数据的开始地址、数据量等，填到打印机的对应寄存器里，然后发一个“开始”命令，打印机开始打印新的作业，打印完后再给 CPU 发中断，如此周而复始地工作。某个进程想打印数据是，调用相应的 API 函数 D，D 把待打印的数据组织成一个打印作业，插入到打印队列的末尾，把进程状态设为挂起状态，然后调用进程调度函数切换别的进程执行，在以后的某个时刻，该进程的作业被打印完，C随即把该进程唤醒，将进程状态设为就绪状态，该进程就能往下执行了。
 
 下面以硬盘为例讲讲多个进程是怎样共享“共享设备”的。硬盘在其控制器上设置有一个缓冲区用来暂时保存从盘片读来的数据或从内存写过来的将要写到盘片去的数据。缓冲区的大小有限，如 8MB，而读写的文件可能很大，如一个视频文件可能有几百 MB 大，所以，一个读写作业可能需要读写多次才能完成。同样地，操作系统需要设置一个类似于刚才所说的“打印队列”的数据结构用来记录各个进程待读写的数据，需要准备一个硬盘中断处理程序E。硬盘完成一次读写后给 CPU 发中断，CPU 转入内核态并跳到 E 执行，如果是写操作，E 把硬盘缓冲区里的数据搬到内存，然后根据某种磁盘调度算法，如：先来先服务、电梯算法、最短寻道优先等算法从各个读写作业中调一个它认为最好的作业出来，并命令硬盘处理该作业。如果在某次中断处理过程中发现某个进程的待读写数据的剩余数据量为 0，则表明该进程的读写作业已经完成，E把该进程唤醒，并把进程状态设为就绪状态，该进程就能往下执行了。
-
-
 
 ## 4. Linux 上的驱动原理
 
@@ -270,22 +264,22 @@ static struct file_operations fops = {
 
 ```c
 struct file_operations {
-	struct module *owner;
-  	loff_t (*llseek) (struct file *, loff_t, int);
-  	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
-  	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
-  	int (*mmap) (struct file *, struct vm_area_struct *);
-  	unsigned long mmap_supported_flags;
-  	int (*open) (struct inode *, struct file *);
-  	int (*release) (struct inode *, struct file *);
-  	int (*flush) (struct file *, fl_owner_t id);
-  	int (*fsync) (struct file *, loff_t, loff_t, int datasync);
-  	int (*lock) (struct file *, int, struct file_lock *);
-  	ssize_t (*sendpage) (struct file *, struct page *, int, size_t, loff_t *, int);
-  	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
-  	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
-  	int (*flock) (struct file *, int, struct file_lock *);
-  	...
+ struct module *owner;
+   loff_t (*llseek) (struct file *, loff_t, int);
+   ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+   ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+   int (*mmap) (struct file *, struct vm_area_struct *);
+   unsigned long mmap_supported_flags;
+   int (*open) (struct inode *, struct file *);
+   int (*release) (struct inode *, struct file *);
+   int (*flush) (struct file *, fl_owner_t id);
+   int (*fsync) (struct file *, loff_t, loff_t, int datasync);
+   int (*lock) (struct file *, int, struct file_lock *);
+   ssize_t (*sendpage) (struct file *, struct page *, int, size_t, loff_t *, int);
+   long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
+   long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
+   int (*flock) (struct file *, int, struct file_lock *);
+   ...
 ```
 
 其中和 ioctl 有关的函数有两个：
@@ -301,4 +295,3 @@ struct file_operations {
   - （调用此兼容模式）。
 
 早期使用 BKL 的架构下，在持有锁的情况下访问低速的设备会很影响性能，因此后来有了 `unlocked_ioctl` 在无锁的情况下进行 ioctl，`compact_ioctl` 存在的意义是为了在 64 位机器上运行 32 位的程序，因为 32 位的程序中的 ioctl 是 32 位的，涉及指针相关的时候就会有很多麻烦。
-
